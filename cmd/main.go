@@ -11,11 +11,11 @@ import (
 	"fmt"
 	"io"
 	"log"
-	"net"
 	"net/url"
 	"os"
 	"path/filepath"
 	"strconv"
+	"strings"
 	"sync"
 	"time"
 
@@ -73,7 +73,8 @@ type RX struct {
 	close func()
 }
 
-func (h *StreamHandler) OpenRX() *RX {
+func (h *StreamHandler) OpenRX(host string, port int) *RX {
+	key := fmt.Sprintf("%s:%d", host, port)
 	c := make(chan *DI, 1)
 
 	// Inject last di processed to the new client.
@@ -84,10 +85,13 @@ func (h *StreamHandler) OpenRX() *RX {
 	h.lastDI.Unlock()
 
 	h.clients.Lock()
-	// generate a timestamp key inside the lock, so we're ensured to receive a unique one.
-	key := fmt.Sprintf("%d", time.Now().UnixNano())
 	if h.clients.m == nil {
 		h.clients.m = make(map[string]chan *DI)
+	}
+	// Remove the client if was already there.
+	if val, ok := h.clients.m[key]; ok {
+		close(val)
+		delete(h.clients.m, key)
 	}
 	h.clients.m[key] = c
 	h.clients.Unlock()
@@ -104,6 +108,53 @@ func (h *StreamHandler) OpenRX() *RX {
 	}
 }
 
+// copy/pasted from git.keepinmind.info/subgendsk/sgenc/trrec.go
+func parseDuration(raw string) (time.Duration, error) {
+	parts := strings.Split(raw, ".")
+	if len(parts) != 2 {
+		return 0, fmt.Errorf("unable to split duration units from decimals")
+	}
+	units := strings.Split(parts[0], ":")
+
+	// Validation
+	if len(units) != 3 {
+		return 0, fmt.Errorf("duration units should be in the form of hh:mm:ss, found %s", parts[0])
+	}
+	for i, v := range units {
+		if len(v) != 2 {
+			return 0, fmt.Errorf("invalid number of digits at position %d: found %d, but only 2 is allowed", i, len(v))
+		}
+	}
+	if len(parts[1]) != 3 {
+		return 0, fmt.Errorf("invalid number of millisecond digits: found %d, but only 3 is allowed", len(parts[1]))
+	}
+
+	h, _ := strconv.Atoi(units[0])
+	m, _ := strconv.Atoi(units[1])
+	s, _ := strconv.Atoi(units[2])
+	ms, _ := strconv.Atoi(parts[1])
+
+	// Validation
+	if m > 59 {
+		return 0, fmt.Errorf("invalid minutes field: must be less than 59")
+	}
+	if s > 59 {
+		return 0, fmt.Errorf("invalid seconds field: must be less than 59")
+	}
+
+	d := time.Duration(0)
+	d += time.Duration(h) * time.Hour
+	d += time.Duration(m) * time.Minute
+	d += time.Duration(s) * time.Second
+	d += time.Duration(ms) * time.Millisecond
+
+	return d, nil
+}
+
+func makeCaption(w string, d time.Duration) string {
+	return fmt.Sprintf("\"%s\", heard after %v", w, d)
+}
+
 // 00:00:00.400,00:00:00.540,all,https://i.ytimg.com/vi/HAfFfqiYLp0/maxresdefault.jpg
 func decodeRecord(rec []string) (*DI, error) {
 	if len(rec) < 4 {
@@ -115,9 +166,14 @@ func decodeRecord(rec []string) (*DI, error) {
 		return nil, fmt.Errorf("unable to recognise url at position 3: %w", err)
 	}
 
-	// TODO: Parse caption
+	d, err := parseDuration(rec[0])
+	if err != nil {
+		return nil, fmt.Errorf("unable to parse record start time: %w", err)
+	}
+
 	return &DI{
-		Link: uri,
+		Link:    uri,
+		Caption: makeCaption(rec[2], d),
 	}, nil
 }
 
@@ -153,21 +209,35 @@ func (h *StreamHandler) Run() {
 	}
 }
 
-func (h *StreamHandler) HandleMessage(msg *osc.Message) {
-	host, port, err := net.SplitHostPort(msg.Address)
+func (h *StreamHandler) HandleStream(msg *osc.Message) {
+	// Find and validate type tags.
+	tt, err := msg.TypeTags()
 	if err != nil {
-		errorf("unable to make osc client: %v", err)
+		errorf("unable to decode message: %v", err)
 		return
 	}
-	p, err := strconv.Atoi(port)
-	if err != nil {
-		errorf("unable to convert port to int: %v", err)
+	if tt != ",si" {
+		errorf("unexpected type tags field %v, wanted ,si", tt)
 		return
 	}
 
-	client := osc.NewClient(host, p)
+	// Retrieve host.
+	host, ok := msg.Arguments[0].(string)
+	if !ok {
+		errorf("unable to parse client stream host")
+		return
+	}
+
+	// Retrieve port.
+	port, ok := msg.Arguments[1].(int32)
+	if !ok {
+		errorf("unable to parse client stream port")
+		return
+	}
+
+	client := osc.NewClient(host, int(port))
 	resp := osc.NewMessage("/di/next")
-	rx := h.OpenRX()
+	rx := h.OpenRX(host, int(port))
 	defer rx.close()
 
 	for di := range rx.c {
@@ -203,7 +273,7 @@ func main() {
 
 	h := NewStreamHandler(in)
 	d := osc.NewStandardDispatcher()
-	d.AddMsgHandler("/di/stream", h.HandleMessage)
+	d.AddMsgHandler("/di/stream", h.HandleStream)
 
 	server := &osc.Server{
 		Addr:       fmt.Sprintf("localhost:%d", *p),
