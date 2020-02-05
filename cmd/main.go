@@ -30,7 +30,7 @@ func logf(format string, args ...interface{}) {
 }
 
 func errorf(format string, args ...interface{}) {
-	logger.Printf(arg0+" error *"+format, args...)
+	logger.Printf(arg0+" error * "+format, args...)
 }
 
 func exitf(format string, args ...interface{}) {
