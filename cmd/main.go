@@ -11,6 +11,7 @@ import (
 	"fmt"
 	"io"
 	"log"
+	"net/http"
 	"net/url"
 	"os"
 	"path/filepath"
@@ -19,11 +20,19 @@ import (
 	"sync"
 	"time"
 
-	"github.com/hypebeast/go-osc/osc"
+	"github.com/gorilla/websocket"
 )
 
 var arg0 = filepath.Base(os.Args[0])
 var logger = log.New(os.Stdout, "", log.LstdFlags)
+
+const (
+	// Time allowed to write a message to the peer.
+	writeWait = 10 * time.Second
+
+	// Time to wait before force close on connection.
+	closeGracePeriod = 10 * time.Second
+)
 
 func logf(format string, args ...interface{}) {
 	logger.Printf(arg0+" * "+format, args...)
@@ -51,8 +60,8 @@ func openInput(path string) (io.ReadCloser, error) {
 
 // DI is a DiscoursiveImage.
 type DI struct {
-	Link    string
-	Caption string
+	Link    string `json:"link"`
+	Caption string `json:"caption"`
 }
 
 type StreamHandler struct {
@@ -61,6 +70,7 @@ type StreamHandler struct {
 		sync.Mutex
 		m map[string]chan *DI
 	}
+	up websocket.Upgrader
 
 	lastDI struct {
 		sync.Mutex
@@ -73,12 +83,13 @@ type RX struct {
 	close func()
 }
 
-func (h *StreamHandler) OpenRX(host string, port int) *RX {
-	key := fmt.Sprintf("%s:%d", host, port)
+func (h *StreamHandler) OpenRX() *RX {
 	c := make(chan *DI, 1)
 
 	// Inject last di processed to the new client.
 	h.lastDI.Lock()
+	// Inside the lock we'll get unique time values.
+	key := "stream:" + strconv.Itoa(int(time.Now().UnixNano()))
 	if di := h.lastDI.val; di != nil {
 		c <- di
 	}
@@ -209,43 +220,30 @@ func (h *StreamHandler) Run() {
 	}
 }
 
-func (h *StreamHandler) HandleStream(msg *osc.Message) {
-	// Find and validate type tags.
-	tt, err := msg.TypeTags()
+func wsError(ws *websocket.Conn, err error) {
+	logf("websocket error: %v", err)
+	ws.WriteMessage(websocket.TextMessage, []byte(err.Error()))
+}
+
+func (h *StreamHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	ws, err := h.up.Upgrade(w, r, nil)
 	if err != nil {
-		errorf("unable to decode message: %v", err)
+		logf(err.Error())
 		return
 	}
-	if tt != ",si" {
-		errorf("unexpected type tags field %v, wanted ,si", tt)
-		return
-	}
+	defer func() {
+		ws.SetWriteDeadline(time.Now().Add(writeWait))
+		ws.WriteMessage(websocket.CloseMessage, websocket.FormatCloseMessage(websocket.CloseNormalClosure, ""))
+		time.Sleep(closeGracePeriod)
+		ws.Close()
+	}()
 
-	// Retrieve host.
-	host, ok := msg.Arguments[0].(string)
-	if !ok {
-		errorf("unable to parse client stream host")
-		return
-	}
-
-	// Retrieve port.
-	port, ok := msg.Arguments[1].(int32)
-	if !ok {
-		errorf("unable to parse client stream port")
-		return
-	}
-
-	client := osc.NewClient(host, int(port))
-	resp := osc.NewMessage("/di/next")
-	rx := h.OpenRX(host, int(port))
+	rx := h.OpenRX()
 	defer rx.close()
 
 	for di := range rx.c {
-		resp.ClearData()
-		resp.Append(di.Link)
-		resp.Append(di.Caption)
-		if err := client.Send(resp); err != nil {
-			errorf("unable to reply to %v: %v", host, err)
+		if err := ws.WriteJSON(di); err != nil {
+			wsError(ws, err)
 			return
 		}
 	}
@@ -253,7 +251,8 @@ func (h *StreamHandler) HandleStream(msg *osc.Message) {
 
 func NewStreamHandler(in io.Reader) *StreamHandler {
 	h := &StreamHandler{
-		r: csv.NewReader(in),
+		r:  csv.NewReader(in),
+		up: websocket.Upgrader{},
 	}
 	go h.Run()
 	return h
@@ -271,15 +270,10 @@ func main() {
 	}
 	defer in.Close()
 
+	logf("server listening on %v", *p)
 	h := NewStreamHandler(in)
-	d := osc.NewStandardDispatcher()
-	d.AddMsgHandler("/di/stream", h.HandleStream)
-
-	server := &osc.Server{
-		Addr:       fmt.Sprintf("localhost:%d", *p),
-		Dispatcher: d,
+	http.Handle("/di/stream", h)
+	if err := http.ListenAndServe(":"+strconv.Itoa(*p), nil); err != nil {
+		exitf("server error: %v", err)
 	}
-
-	logf("OSC server listening on %d", *p)
-	server.ListenAndServe()
 }
