@@ -2,9 +2,11 @@
 This tool provides a websocket implementation that will serve images with captions from a text source, which could be a file as well as its stdin.
 
 ## Installation From Source
-- clone the repository `git clone https://github.com/jecoz/dis.git`
-- (opt) use go modules `export GO111MODULE=on`
-- build with `make`
+```
+% git clone https://github.com/jecoz/dis.git # clone the repository
+% export GO111MODULE=on # (opt) [use go modules](https://blog.golang.org/using-go-modules).
+% make # build
+```
 
 You'll find the produced executables inside `bin/`. You can start `dis` serving lines from the `examples/hacking-diic_example-1.csv` file by running:
 ```
