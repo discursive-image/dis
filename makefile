@@ -2,13 +2,12 @@
 #
 # SPDX-License-Identifier: MIT
 
+all: dis examples
 dis: cmd/main.go
 	go build -v -o bin/$@ $^
-examples: osc-client ratereader
-osc-client:
-	go build -v -o bin/$@ examples/client.go
+examples: ratereader
 ratereader:
-	go build -v -o bin/$@ examples/ratereader.go
+	go build -v -o bin/$@ cmd/ratereader.go
 format:
 	go fmt ./...
 
