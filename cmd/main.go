@@ -5,6 +5,7 @@
 package main
 
 import (
+	"context"
 	"encoding/csv"
 	"errors"
 	"flag"
@@ -197,6 +198,9 @@ func decodeRecord(rec []string) (*DI, error) {
 // Run keeps on reading from `h`'s internal reader, providing its
 // contents to the registered clients.
 func (h *StreamHandler) Run() {
+	logf("opening stream handler loop")
+	defer logf("closing stream handler loop")
+
 	for {
 		// Read next record from input.
 		rec, err := h.r.Read()
@@ -207,6 +211,7 @@ func (h *StreamHandler) Run() {
 		if err != nil {
 			exitf("unable to read from input: %v", err)
 		}
+		logf("stream handler: record read: %v", rec)
 
 		// Decode it into a DI instance.
 		di, err := decodeRecord(rec)
@@ -235,12 +240,14 @@ func wsError(ws *websocket.Conn, err error) {
 }
 
 func (h *StreamHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	logf("connection from %v, %v", r.Host, r.URL)
 	ws, err := h.up.Upgrade(w, r, nil)
 	if err != nil {
 		logf(err.Error())
 		return
 	}
 	defer func() {
+		logf("closing connection with %v", r.Host)
 		ws.SetWriteDeadline(time.Now().Add(writeWait))
 		ws.WriteMessage(websocket.CloseMessage, websocket.FormatCloseMessage(websocket.CloseNormalClosure, ""))
 		time.Sleep(closeGracePeriod)
@@ -283,27 +290,46 @@ func main() {
 	flag.Parse()
 
 	// Prepare input.
+	logf("opening input from %v", *i)
 	in, err := openInput(*i)
 	if err != nil {
 		exitf(err.Error())
 	}
 	defer in.Close()
 
+	// Register the handler.
+	h := NewStreamHandler(in)
+	http.Handle("/di/stream", h)
+
+	// Configure server.
+	host := ":" + strconv.Itoa(*p)
+	srv := &http.Server{
+		Addr: host,
+		// Good practice to set timeouts to avoid Slowloris attacks.
+		WriteTimeout: time.Second * 15,
+		ReadTimeout:  time.Second * 15,
+		IdleTimeout:  time.Second * 60,
+	}
+
+	// Run our server in a goroutine so that it doesn't block.
+	go func() {
+		logf("server listening on %v", host)
+		if err := srv.ListenAndServe(); err != nil {
+			logf("server listener error: %v", err)
+		}
+	}()
+
 	// Handle signals.
 	sigc := make(chan os.Signal, 1)
 	signal.Notify(sigc, os.Interrupt)
-	go func() {
-		sig := <-sigc
-		d := time.Second*5
-		logf("signal %v received, waiting %v for input to be closed", sig, d)
-		<-time.After(d)
-		in.Close()
-	}()
 
-	logf("server listening on %v", *p)
-	h := NewStreamHandler(in)
-	http.Handle("/di/stream", h)
-	if err := http.ListenAndServe(":"+strconv.Itoa(*p), nil); err != nil {
-		exitf("server error: %v", err)
-	}
+	sig := <-sigc
+
+	// If in the meanwhile stdin is closed, the server will serve the last
+	// content to the clients before exiting.
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second*5)
+	defer cancel()
+
+	logf("signal %v received, shutting down...", sig)
+	srv.Shutdown(ctx)
 }
