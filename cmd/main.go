@@ -78,12 +78,17 @@ type StreamHandler struct {
 	}
 }
 
-type RX struct {
+type diRx struct {
 	c     chan *DI
 	close func()
 }
 
-func (h *StreamHandler) OpenRX() *RX {
+// OpenRx returns a new instance of a channel that is registered
+// with the stream handler. Each time a new image is read, it is
+// broadcasted to all registered channels.
+// Remember to call `close` when done with it, to allow the handler
+// to remove the channel from the list of registered clients.
+func (h *StreamHandler) OpenRx() *diRx {
 	c := make(chan *DI, 1)
 
 	// Inject last di processed to the new client.
@@ -107,7 +112,7 @@ func (h *StreamHandler) OpenRX() *RX {
 	h.clients.m[key] = c
 	h.clients.Unlock()
 
-	return &RX{
+	return &diRx{
 		c: c,
 		close: func() {
 			defer close(c)
@@ -188,6 +193,8 @@ func decodeRecord(rec []string) (*DI, error) {
 	}, nil
 }
 
+// Run keeps on reading from `h`'s internal reader, providing its
+// contents to the registered clients.
 func (h *StreamHandler) Run() {
 	for {
 		// Read next record from input.
@@ -238,7 +245,7 @@ func (h *StreamHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		ws.Close()
 	}()
 
-	rx := h.OpenRX()
+	rx := h.OpenRx()
 	defer rx.close()
 
 	for di := range rx.c {
@@ -249,6 +256,8 @@ func (h *StreamHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
+// NewStreamHandler returns a new http.Handler implementation that
+// supports websockets.
 func NewStreamHandler(in io.Reader) *StreamHandler {
 	upgrader := websocket.Upgrader{
 		ReadBufferSize:    4096,
