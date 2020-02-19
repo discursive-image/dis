@@ -14,6 +14,7 @@ import (
 	"net/http"
 	"net/url"
 	"os"
+	"os/signal"
 	"path/filepath"
 	"strconv"
 	"strings"
@@ -200,6 +201,7 @@ func (h *StreamHandler) Run() {
 		// Read next record from input.
 		rec, err := h.r.Read()
 		if err != nil && errors.Is(err, io.EOF) {
+			logf("input was closed (%v), exiting", err)
 			os.Exit(0)
 		}
 		if err != nil {
@@ -286,6 +288,17 @@ func main() {
 		exitf(err.Error())
 	}
 	defer in.Close()
+
+	// Handle signals.
+	sigc := make(chan os.Signal, 1)
+	signal.Notify(sigc, os.Interrupt)
+	go func() {
+		sig := <-sigc
+		d := time.Second*5
+		logf("signal %v received, waiting %v for input to be closed", sig, d)
+		<-time.After(d)
+		in.Close()
+	}()
 
 	logf("server listening on %v", *p)
 	h := NewStreamHandler(in)
