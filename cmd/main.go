@@ -250,9 +250,17 @@ func (h *StreamHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 }
 
 func NewStreamHandler(in io.Reader) *StreamHandler {
+	upgrader := websocket.Upgrader{
+		ReadBufferSize:    4096,
+		WriteBufferSize:   4096,
+		EnableCompression: true,
+		CheckOrigin: func(r *http.Request) bool {
+			return true
+		},
+	}
 	h := &StreamHandler{
 		r:  csv.NewReader(in),
-		up: websocket.Upgrader{},
+		up: upgrader,
 	}
 	go h.Run()
 	return h
