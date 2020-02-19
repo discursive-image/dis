@@ -2,6 +2,7 @@
 This tool provides a websocket implementation that will serve images with captions from a text source, which could be a file as well as its stdin.
 
 ## Installation From Source
+(requires [Go](https://golang.org/dl/))
 ```
 % git clone https://github.com/jecoz/dis.git # clone the repository
 % export GO111MODULE=on # (opt) [use go modules](https://blog.golang.org/using-go-modules).
