@@ -54,7 +54,7 @@ func main() {
 		for {
 			_, message, err := c.ReadMessage()
 			if err != nil {
-				errorf("read:", err)
+				errorf("read: %v", err)
 				return
 			}
 			logf("recv: %s", message)

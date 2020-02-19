@@ -21,6 +21,7 @@ import (
 	"strings"
 	"sync"
 	"time"
+	"bufio"
 
 	"github.com/gorilla/websocket"
 )
@@ -67,7 +68,7 @@ type DI struct {
 }
 
 type StreamHandler struct {
-	r       *csv.Reader
+	r       io.Reader
 	clients struct {
 		sync.Mutex
 		m map[string]chan *DI
@@ -200,10 +201,11 @@ func decodeRecord(rec []string) (*DI, error) {
 func (h *StreamHandler) Run() {
 	logf("opening stream handler loop")
 	defer logf("closing stream handler loop")
+	r := csv.NewReader(h.r)
 
 	for {
 		// Read next record from input.
-		rec, err := h.r.Read()
+		rec, err := r.Read()
 		if err != nil && errors.Is(err, io.EOF) {
 			logf("input was closed (%v), exiting", err)
 			os.Exit(0)
@@ -211,7 +213,7 @@ func (h *StreamHandler) Run() {
 		if err != nil {
 			exitf("unable to read from input: %v", err)
 		}
-		logf("stream handler: record read: %v", rec)
+		logf("<--- %v", rec)
 
 		// Decode it into a DI instance.
 		di, err := decodeRecord(rec)
@@ -277,7 +279,7 @@ func NewStreamHandler(in io.Reader) *StreamHandler {
 		},
 	}
 	h := &StreamHandler{
-		r:  csv.NewReader(in),
+		r:  bufio.NewReader(in),
 		up: upgrader,
 	}
 	go h.Run()
