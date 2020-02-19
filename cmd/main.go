@@ -5,6 +5,7 @@
 package main
 
 import (
+	"bufio"
 	"context"
 	"encoding/csv"
 	"errors"
@@ -21,7 +22,6 @@ import (
 	"strings"
 	"sync"
 	"time"
-	"bufio"
 
 	"github.com/gorilla/websocket"
 )
@@ -74,6 +74,7 @@ type StreamHandler struct {
 		m map[string]chan *DI
 	}
 	up websocket.Upgrader
+	m  *mapset
 
 	lastDI struct {
 		sync.Mutex
@@ -174,25 +175,42 @@ func makeCaption(w string, d time.Duration) string {
 	return fmt.Sprintf("\"%s\", heard after %v", w, d)
 }
 
+type mapset struct {
+	cs int // column start
+	ce int // column end
+	cw int // column word
+	cl int // column link
+}
+
+func (m *mapset) max() int {
+	max := 0
+	for _, v := range []int{m.cs, m.ce, m.cw, m.cl} {
+		if v > max {
+			max = v
+		}
+	}
+	return max
+}
+
 // 00:00:00.400,00:00:00.540,all,https://i.ytimg.com/vi/HAfFfqiYLp0/maxresdefault.jpg
-func decodeRecord(rec []string) (*DI, error) {
-	if len(rec) < 4 {
-		return nil, fmt.Errorf("unexpected record length %d, need at least 4", len(rec))
+func decodeRecord(rec []string, m *mapset) (*DI, error) {
+	if len(rec) < m.max() {
+		return nil, fmt.Errorf("unexpected record length %d, need at least %d", len(rec), m.max())
 	}
 
-	uri := rec[3]
+	uri := rec[m.cl]
 	if _, err := url.ParseRequestURI(uri); err != nil {
-		return nil, fmt.Errorf("unable to recognise url at position 3: %w", err)
+		return nil, fmt.Errorf("unable to recognise url at position %d: %w", m.cl, err)
 	}
 
-	d, err := parseDuration(rec[0])
+	d, err := parseDuration(rec[m.cs])
 	if err != nil {
 		return nil, fmt.Errorf("unable to parse record start time: %w", err)
 	}
 
 	return &DI{
 		Link:    uri,
-		Caption: makeCaption(rec[2], d),
+		Caption: makeCaption(rec[m.cw], d),
 	}, nil
 }
 
@@ -216,7 +234,7 @@ func (h *StreamHandler) Run() {
 		logf("<--- %v", rec)
 
 		// Decode it into a DI instance.
-		di, err := decodeRecord(rec)
+		di, err := decodeRecord(rec, h.m)
 		if err != nil {
 			errorf(err.Error())
 			continue
@@ -269,7 +287,7 @@ func (h *StreamHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 // NewStreamHandler returns a new http.Handler implementation that
 // supports websockets.
-func NewStreamHandler(in io.Reader) *StreamHandler {
+func NewStreamHandler(in io.Reader, m *mapset) *StreamHandler {
 	upgrader := websocket.Upgrader{
 		ReadBufferSize:    4096,
 		WriteBufferSize:   4096,
@@ -281,6 +299,7 @@ func NewStreamHandler(in io.Reader) *StreamHandler {
 	h := &StreamHandler{
 		r:  bufio.NewReader(in),
 		up: upgrader,
+		m:  m,
 	}
 	go h.Run()
 	return h
@@ -289,6 +308,10 @@ func NewStreamHandler(in io.Reader) *StreamHandler {
 func main() {
 	i := flag.String("i", "-", "Input file path. Use - for stdin.")
 	p := flag.Int("p", 7745, "Server listening port.")
+	cs := flag.Int("cs", 0, "Index of the column holding start information.")
+	ce := flag.Int("ce", 1, "Index of the column holding end information.")
+	cw := flag.Int("cw", 2, "Index of the column holding spoken word.")
+	cl := flag.Int("cl", 5, "Index of the column holding image link.")
 	flag.Parse()
 
 	// Prepare input.
@@ -300,7 +323,12 @@ func main() {
 	defer in.Close()
 
 	// Register the handler.
-	h := NewStreamHandler(in)
+	h := NewStreamHandler(in, &mapset{
+		cs: *cs,
+		ce: *ce,
+		cw: *cw,
+		cl: *cl,
+	})
 	http.Handle("/di/stream", h)
 
 	// Configure server.
