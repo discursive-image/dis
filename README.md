@@ -18,6 +18,8 @@ Or if you want it to read from a file indefinetly (waits for new lines to be wri
  % tail -f examples/hacking-diic_example-1.csv | bin/dis
 ```
 
+You can choose which port `dis` should use using the `-p` flag (checkout `dis --help` for more). When the server starts correctly, a websocket endpoint will be available at `<host>:<port>/di/stream`.
+
 ## Specs
 Input `csv` file is expected to be formatted as
 ```
