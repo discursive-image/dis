@@ -288,7 +288,7 @@ func NewStreamHandler(in io.Reader) *StreamHandler {
 
 func main() {
 	i := flag.String("i", "-", "Input file path. Use - for stdin.")
-	p := flag.Int("p", 7745, "OSC server listening port.")
+	p := flag.Int("p", 7745, "Server listening port.")
 	flag.Parse()
 
 	// Prepare input.
