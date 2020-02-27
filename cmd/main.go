@@ -229,7 +229,14 @@ func (h *StreamHandler) handleRecord(rec []string) (*DI, error) {
 		return nil, err
 	}
 
-	f, err := os.Create(filepath.Join(h.sd, di.FileName))
+	fn := filepath.Join(h.sd, di.FileName)
+
+	// If the file is already there, do not download again.
+	if _, err := os.Stat(fn); err == nil {
+	       return di, nil
+	}
+
+	f, err := os.Create(fn)
 	if err != nil {
 		return nil, fmt.Errorf("unable to prepare file for storing image %v: %w", di.FileName, err)
 	}
