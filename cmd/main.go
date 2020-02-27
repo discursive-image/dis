@@ -233,7 +233,7 @@ func (h *StreamHandler) handleRecord(rec []string) (*DI, error) {
 
 	// If the file is already there, do not download again.
 	if _, err := os.Stat(fn); err == nil {
-	       return di, nil
+		return di, nil
 	}
 
 	f, err := os.Create(fn)
