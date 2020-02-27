@@ -6,15 +6,15 @@ package main
 
 import (
 	"bufio"
-	"fmt"
-	"os"
-	"path/filepath"
-	"time"
-	"strings"
-	"strconv"
 	"encoding/csv"
 	"errors"
+	"fmt"
 	"io"
+	"os"
+	"path/filepath"
+	"strconv"
+	"strings"
+	"time"
 )
 
 var arg0 = filepath.Base(os.Args[0])
@@ -28,7 +28,7 @@ func exitf(format string, args ...interface{}) {
 	os.Exit(1)
 }
 
-// Copy-pasted code from https://git.keepinmind.info/subgensdk/sgenc,
+// copy/pasted from https://git.keepinmind.info/subgensdk/sgenc,
 // Licensed under MIT, still not open source.
 // TODO: import the library as soon as it is available.
 func parseDuration(raw string) (time.Duration, error) {
@@ -101,5 +101,3 @@ func main() {
 		w.Flush()
 	}
 }
-
-
