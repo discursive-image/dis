@@ -63,12 +63,15 @@ func openInput(path string) (io.ReadCloser, error) {
 
 // DI is a DiscoursiveImage.
 type DI struct {
-	Link    string `json:"link"`
-	Caption string `json:"caption"`
+	Link     string `json:"link"`
+	Word     string `json:"word"`
+	Caption  string `json:"caption"`
+	FileName string `json:"file_name"`
 }
 
 type StreamHandler struct {
 	r       io.Reader
+	sd      string // storage directory path.
 	clients struct {
 		sync.Mutex
 		m map[string]chan *DI
@@ -129,6 +132,8 @@ func (h *StreamHandler) OpenRx() *diRx {
 }
 
 // copy/pasted from git.keepinmind.info/subgendsk/sgenc/trrec.go
+// Licensed under MIT, still not open source.
+// TODO: import the library as soon as it is available.
 func parseDuration(raw string) (time.Duration, error) {
 	parts := strings.Split(raw, ".")
 	if len(parts) != 2 {
@@ -192,14 +197,15 @@ func (m *mapset) max() int {
 	return max
 }
 
-// 00:00:00.400,00:00:00.540,all,https://i.ytimg.com/vi/HAfFfqiYLp0/maxresdefault.jpg
+// 00:00:00.000,00:00:00.400,00:00:00.540,all,https://i.ytimg.com/vi/HAfFfqiYLp0/maxresdefault.jpg
 func decodeRecord(rec []string, m *mapset) (*DI, error) {
 	if len(rec) < m.max() {
 		return nil, fmt.Errorf("unexpected record length %d, need at least %d", len(rec), m.max())
 	}
 
 	uri := rec[m.cl]
-	if _, err := url.ParseRequestURI(uri); err != nil {
+	u, err := url.ParseRequestURI(uri)
+	if err != nil {
 		return nil, fmt.Errorf("unable to recognise url at position %d: %w", m.cl, err)
 	}
 
@@ -207,11 +213,38 @@ func decodeRecord(rec []string, m *mapset) (*DI, error) {
 	if err != nil {
 		return nil, fmt.Errorf("unable to parse record start time: %w", err)
 	}
+	word := rec[m.cw]
 
 	return &DI{
-		Link:    uri,
-		Caption: makeCaption(rec[m.cw], d),
+		FileName: word + "-" + filepath.Base(u.Path),
+		Link:     uri,
+		Word:     word,
+		Caption:  makeCaption(word, d),
 	}, nil
+}
+
+func (h *StreamHandler) handleRecord(rec []string) (*DI, error) {
+	di, err := decodeRecord(rec, h.m)
+	if err != nil {
+		return nil, err
+	}
+
+	f, err := os.Create(filepath.Join(h.sd, di.FileName))
+	if err != nil {
+		return nil, fmt.Errorf("unable to prepare file for storing image %v: %w", di.FileName, err)
+	}
+	defer f.Close()
+
+	resp, err := http.Get(di.Link)
+	if err != nil {
+		return nil, fmt.Errorf("unable to download image %v: %w", di.FileName, err)
+	}
+	defer resp.Body.Close()
+	if _, err = io.Copy(f, resp.Body); err != nil {
+		return nil, fmt.Errorf("unable to store image: %w", err)
+	}
+
+	return di, nil
 }
 
 // Run keeps on reading from `h`'s internal reader, providing its
@@ -233,8 +266,7 @@ func (h *StreamHandler) Run() {
 		}
 		logf("<--- %v", rec)
 
-		// Decode it into a DI instance.
-		di, err := decodeRecord(rec, h.m)
+		di, err := h.handleRecord(rec)
 		if err != nil {
 			errorf(err.Error())
 			continue
@@ -260,7 +292,7 @@ func wsError(ws *websocket.Conn, err error) {
 }
 
 func (h *StreamHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	logf("connection from %v, %v", r.Host, r.URL)
+	logf("connection from %v, %v", r.RemoteAddr, r.URL)
 	ws, err := h.up.Upgrade(w, r, nil)
 	if err != nil {
 		logf(err.Error())
@@ -287,7 +319,7 @@ func (h *StreamHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 // NewStreamHandler returns a new http.Handler implementation that
 // supports websockets.
-func NewStreamHandler(in io.Reader, m *mapset) *StreamHandler {
+func NewStreamHandler(in io.Reader, sd string, m *mapset) *StreamHandler {
 	upgrader := websocket.Upgrader{
 		ReadBufferSize:    4096,
 		WriteBufferSize:   4096,
@@ -297,6 +329,7 @@ func NewStreamHandler(in io.Reader, m *mapset) *StreamHandler {
 		},
 	}
 	h := &StreamHandler{
+		sd: sd,
 		r:  bufio.NewReader(in),
 		up: upgrader,
 		m:  m,
@@ -305,13 +338,29 @@ func NewStreamHandler(in io.Reader, m *mapset) *StreamHandler {
 	return h
 }
 
+type fileHandler struct {
+	handler http.Handler
+}
+
+func FileServer(root http.FileSystem) http.Handler {
+	return &fileHandler{http.FileServer(root)}
+}
+
+func (f *fileHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	logf("file request from %v: %v", r.RemoteAddr, r.URL.Path)
+	f.handler.ServeHTTP(w, r)
+}
+
 func main() {
+	dsid := "dimages-" + strconv.Itoa(int(time.Now().Unix()))
 	i := flag.String("i", "-", "Input file path. Use - for stdin.")
+	wd := flag.String("wd", "."+arg0, "Image storage directory.")
+	sid := flag.String("s", dsid, "Session identifier. Images downloaded will be stored inside wd/sid.")
 	p := flag.Int("p", 7745, "Server listening port.")
-	cs := flag.Int("cs", 0, "Index of the column holding start information.")
-	ce := flag.Int("ce", 1, "Index of the column holding end information.")
-	cw := flag.Int("cw", 2, "Index of the column holding spoken word.")
-	cl := flag.Int("cl", 5, "Index of the column holding image link.")
+	cs := flag.Int("cs", 1, "Index of the column holding start information.")
+	ce := flag.Int("ce", 2, "Index of the column holding end information.")
+	cw := flag.Int("cw", 3, "Index of the column holding spoken word.")
+	cl := flag.Int("cl", 6, "Index of the column holding image link.")
 	flag.Parse()
 
 	// Prepare input.
@@ -322,8 +371,14 @@ func main() {
 	}
 	defer in.Close()
 
-	// Register the handler.
-	h := NewStreamHandler(in, &mapset{
+	// Prepare storage directory.
+	dir := filepath.Join(*wd, *sid)
+	if err := os.MkdirAll(dir, os.ModePerm); err != nil {
+		exitf("unable to create storage directory %s: %v", dir, err)
+	}
+
+	// Register stream handler.
+	h := NewStreamHandler(in, dir, &mapset{
 		cs: *cs,
 		ce: *ce,
 		cw: *cw,
@@ -331,11 +386,14 @@ func main() {
 	})
 	http.Handle("/di/stream", h)
 
+	// Register the file handler.
+	fs := http.Dir(dir)
+	http.Handle("/di/images", FileServer(fs))
+
 	// Configure server.
 	host := ":" + strconv.Itoa(*p)
 	srv := &http.Server{
-		Addr: host,
-		// Good practice to set timeouts to avoid Slowloris attacks.
+		Addr:         host,
 		WriteTimeout: time.Second * 15,
 		ReadTimeout:  time.Second * 15,
 		IdleTimeout:  time.Second * 60,
