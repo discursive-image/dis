@@ -216,7 +216,7 @@ func decodeRecord(rec []string, m *mapset) (*DI, error) {
 	word := rec[m.cw]
 
 	return &DI{
-		FileName: word + "-" + filepath.Base(url.PathEscape(u.Path)),
+		FileName: word + filepath.Ext(u.Path),
 		Link:     uri,
 		Word:     word,
 		Caption:  makeCaption(word, d),
@@ -236,15 +236,17 @@ func (h *StreamHandler) handleRecord(rec []string) (*DI, error) {
 		return di, nil
 	}
 
+	logf("downloading image for: %v", di.FileName)
+
 	f, err := os.Create(fn)
 	if err != nil {
-		return nil, fmt.Errorf("unable to prepare file for storing image %v: %w", di.FileName, err)
+		return nil, fmt.Errorf("unable to prepare file for storing image: %w", err)
 	}
 	defer f.Close()
 
 	resp, err := http.Get(di.Link)
 	if err != nil {
-		return nil, fmt.Errorf("unable to download image %v: %w", di.FileName, err)
+		return nil, fmt.Errorf("unable to download image: %w", err)
 	}
 	defer resp.Body.Close()
 	if _, err = io.Copy(f, resp.Body); err != nil {
@@ -271,13 +273,13 @@ func (h *StreamHandler) Run() {
 		if err != nil {
 			exitf("unable to read from input: %v", err)
 		}
-		logf("<--- %v", rec)
-
 		di, err := h.handleRecord(rec)
 		if err != nil {
 			errorf(err.Error())
 			continue
 		}
+
+		logf("---> %v", di.FileName)
 
 		// Send it to all clients.
 		h.clients.Lock()
@@ -306,7 +308,7 @@ func (h *StreamHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	defer func() {
-		logf("closing connection with %v", r.Host)
+		logf("closing connection with %v", r.RemoteAddr)
 		ws.SetWriteDeadline(time.Now().Add(writeWait))
 		ws.WriteMessage(websocket.CloseMessage, websocket.FormatCloseMessage(websocket.CloseNormalClosure, ""))
 		time.Sleep(closeGracePeriod)
