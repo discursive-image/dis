@@ -7,6 +7,7 @@ package main
 import (
 	"bufio"
 	"context"
+	"crypto/md5"
 	"encoding/csv"
 	"errors"
 	"flag"
@@ -215,8 +216,12 @@ func decodeRecord(rec []string, m *mapset) (*DI, error) {
 	}
 	word := rec[m.cw]
 
+	h := md5.New()
+	io.WriteString(h, uri)
+	fn := fmt.Sprintf("%s-%x%s", word, h.Sum(nil), filepath.Ext(u.Path))
+
 	return &DI{
-		FileName: word + filepath.Ext(u.Path),
+		FileName: fn,
 		Link:     uri,
 		Word:     word,
 		Caption:  makeCaption(word, d),
