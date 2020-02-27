@@ -216,7 +216,7 @@ func decodeRecord(rec []string, m *mapset) (*DI, error) {
 	word := rec[m.cw]
 
 	return &DI{
-		FileName: word + "-" + filepath.Base(u.Path),
+		FileName: word + "-" + filepath.Base(url.PathEscape(u.Path)),
 		Link:     uri,
 		Word:     word,
 		Caption:  makeCaption(word, d),
