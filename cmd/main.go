@@ -48,9 +48,8 @@ func openInput(path string) (io.ReadCloser, error) {
 }
 
 func main() {
-	dsid := "dimages-" + strconv.Itoa(int(time.Now().Unix()))
 	i := flag.String("i", "-", "Input file path. Use - for stdin.")
-	sd := flag.String("sd", dsid, "Storage directory path - where images will be stored.")
+	sd := flag.String("sd", "dimages-all", "Storage directory path - where images will be stored.")
 	p := flag.Int("p", 7745, "Server listening port.")
 	cs := flag.Int("cs", 1, "Index of the column holding start information.")
 	ce := flag.Int("ce", 2, "Index of the column holding end information.")
@@ -68,10 +67,9 @@ func main() {
 
 	// Register the file handler.
 	fh := api.NewFileHandler(*sd)
-	http.Handle("/di/images/", fh)
+	http.Handle("/di/images/", http.StripPrefix("/di/images/", fh))
 
 	// Register stream handler.
-
 	sh := api.NewStreamHandler(in, fh, api.NewMapSet(*cs, *ce, *cw, *cl))
 	http.Handle("/di/stream", sh)
 
