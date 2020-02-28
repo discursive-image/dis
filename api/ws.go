@@ -190,7 +190,7 @@ func decodeRecord(rec []string, m *mapset) (*DI, error) {
 	fn := fmt.Sprintf("%s-%x%s", word, h.Sum(nil), filepath.Ext(u.Path))
 
 	return &DI{
-		FileName: fn,
+		FileName: url.PathEscape(fn),
 		Link:     uri,
 		Word:     word,
 	}, nil
