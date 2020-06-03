@@ -5,10 +5,18 @@
 package api
 
 import (
+	"log"
 	"net/http"
 	"os"
 	"path/filepath"
 )
+
+var arg0 = filepath.Base(os.Args[0])
+var logger = log.New(os.Stderr, "", 0)
+
+func logf(format string, args ...interface{}) {
+	logger.Printf(arg0+" * "+format, args...)
+}
 
 type FileHandler struct {
 	fs  http.Handler

@@ -1,4 +1,4 @@
-module github.com/jecoz/dis
+module github.com/discursive-image/dis
 
 go 1.13
 

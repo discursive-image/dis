@@ -2,6 +2,8 @@
 #
 # SPDX-License-Identifier: MIT
 
+export GO111MODULE=on
+
 all: dis
 dis: cmd/main.go
 	go build -v -o bin/$@ $^
