@@ -4,18 +4,20 @@
 
 export GO111MODULE=on
 
-all: dis
-dis: cmd/main.go
-	go build -v -o bin/$@ $^
+all: dis examples
 
-examples: ratereader client replayreader
+dis:
+	go build -v -o bin/$@ ./cmd/$@
+examples: ratereader echoclient replayreader
 ratereader:
-	go build -v -o bin/$@ cmd/ratereader.go
-client:
-	go build -v -o bin/$@ cmd/client.go
+	go build -v -o bin/$@ ./cmd/$@
+echoclient:
+	go build -v -o bin/$@ ./cmd/$@
 replayreader:
-	go build -v -o bin/$@ cmd/replayreader.go
+	go build -v -o bin/$@ ./cmd/$@
 
 format:
 	go fmt ./...
+clean:
+	rm -rf bin
 
