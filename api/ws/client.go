@@ -27,7 +27,7 @@ const (
 
 // Client is a middleman between the websocket connection and the hub.
 type Client struct {
-	Host string
+	Addr string
 	hub  *Hub
 
 	// The websocket connection.
@@ -55,7 +55,10 @@ func (c *Client) readMessages() {
 		c.conn.Close()
 	}()
 	c.conn.SetReadDeadline(time.Now().Add(pongWait))
-	c.conn.SetPongHandler(func(string) error { c.conn.SetReadDeadline(time.Now().Add(pongWait)); return nil })
+	c.conn.SetPongHandler(func(string) error {
+		c.conn.SetReadDeadline(time.Now().Add(pongWait))
+		return nil
+	})
 	for {
 		var event ClientEvent
 		if err := c.conn.ReadJSON(&event); err != nil {

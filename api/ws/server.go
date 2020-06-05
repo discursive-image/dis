@@ -297,7 +297,7 @@ func (s *Server) ServeWs(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	client := &Client{
-		Host: r.Host,
+		Addr: r.RemoteAddr,
 		hub:  s.hub,
 		conn: conn,
 		send: make(chan *DI, 50),
