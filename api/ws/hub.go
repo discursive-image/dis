@@ -34,9 +34,11 @@ func (h *Hub) run() {
 	for {
 		select {
 		case client := <-h.register:
+			logf("registering client %v", client.Host)
 			h.clients[client] = true
 		case client := <-h.unregister:
 			if _, ok := h.clients[client]; ok {
+				logf("unregistering client %v", client.Host)
 				delete(h.clients, client)
 				close(client.send)
 			}

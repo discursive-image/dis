@@ -22,8 +22,17 @@ import (
 	"time"
 
 	"github.com/discursive-image/dis/api"
+	"github.com/gorilla/websocket"
 	"github.com/hypebeast/go-osc/osc"
 )
+
+var upgrader = websocket.Upgrader{
+	ReadBufferSize:  1024,
+	WriteBufferSize: 1024,
+	CheckOrigin: func(r *http.Request) bool {
+		return true
+	},
+}
 
 type FileSystem interface {
 	Exists(string) bool
@@ -264,8 +273,13 @@ func (s *Server) Run(ctx context.Context, in io.Reader) {
 		}
 	}()
 
-	if err := <-s.Done; err != nil {
-		errorf("closing websocker server: %v", err)
+	select {
+	case err := <-s.Done:
+		if err != nil {
+			errorf("closing websocker server: %v", err)
+		}
+	case <-ctx.Done():
+		errorf("context invalidated: %v", ctx.Err())
 	}
 
 	// If in the meanwhile stdin is closed, the server will serve the last
@@ -283,6 +297,7 @@ func (s *Server) ServeWs(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	client := &Client{
+		Host: r.Host,
 		hub:  s.hub,
 		conn: conn,
 		send: make(chan *DI, 50),
