@@ -39,8 +39,8 @@ type Client struct {
 }
 
 type ClientEvent struct {
-	Type      string `json:"type"`
-	ImageLink string `json:"image_link"`
+	Type     string `json:"type"`
+	FileName string `json:"file_name"`
 }
 
 func wsError(ws *websocket.Conn, err error) {
@@ -69,13 +69,13 @@ func (c *Client) readMessages() {
 			break
 		}
 
-		logf("client event received from %v: %v -> %v", c.Addr, event.Type, event.ImageLink)
+		logf("client event received from %v: %v -> %v", c.Addr, event.Type, event.FileName)
 
 		var msg *osc.Message
 		switch event.Type {
 		case "on-screen":
 			msg = osc.NewMessage("max/play")
-			msg.Append(event.ImageLink)
+			msg.Append(event.FileName)
 		case "off-screen":
 			msg = osc.NewMessage("max/stop")
 		default:
