@@ -146,7 +146,7 @@ func ParseDuration(raw string) (time.Duration, error) {
 }
 
 // 00:00:00.000,00:00:00.400,00:00:00.540,all,https://i.ytimg.com/vi/HAfFfqiYLp0/maxresdefault.jpg
-func decodeRecord(m *mapping, rec []string) (*DI, error) {
+func decodeDI(m *mapping, rec []string) (*DI, error) {
 	if len(rec) < m.max() {
 		return nil, fmt.Errorf("unexpected record length %d, need at least %d", len(rec), m.max())
 	}
@@ -170,10 +170,11 @@ func decodeRecord(m *mapping, rec []string) (*DI, error) {
 
 	h := md5.New()
 	io.WriteString(h, uri)
-	fn := fmt.Sprintf("%s-%x%s", word, h.Sum(nil), filepath.Ext(u.Path))
+	io.WriteString(h, word)
+	fn := fmt.Sprintf("%x%s", h.Sum(nil), filepath.Ext(u.Path))
 
 	return &DI{
-		FileName: url.PathEscape(fn),
+		FileName: fn,
 		Link:     uri,
 		Word:     word,
 		StartAt:  start,
@@ -225,7 +226,7 @@ func (s *Server) read(ctx context.Context, in io.Reader) {
 			return
 		}
 
-		di, err := decodeRecord(s.Mapping, rec)
+		di, err := decodeDI(s.Mapping, rec)
 		if err != nil {
 			errorf(err.Error())
 			continue
