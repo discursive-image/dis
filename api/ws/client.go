@@ -67,7 +67,7 @@ func (c *Client) readMessages() {
 			}
 		}
 
-		logf("client event received from %v: %v -> ", c.Addr, event.Type, event.ImageLink)
+		logf("client event received from %v: %v -> %v", c.Addr, event.Type, event.ImageLink)
 		var msg *osc.Message
 		switch event.Type {
 		case "on-screen":
