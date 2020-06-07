@@ -68,6 +68,7 @@ func (c *Client) readMessages() {
 		}
 
 		logf("client event received from %v: %v -> %v", c.Addr, event.Type, event.ImageLink)
+
 		var msg *osc.Message
 		switch event.Type {
 		case "on-screen":
@@ -77,7 +78,7 @@ func (c *Client) readMessages() {
 			msg = osc.NewMessage("max/stop")
 		default:
 			wsError(c.conn, fmt.Errorf("undefined event type %v", event.Type))
-			break
+			continue
 		}
 
 		if err := c.osc.Send(msg); err != nil {
