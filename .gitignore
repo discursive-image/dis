@@ -5,3 +5,4 @@
 bin/
 dimages-all/
 .DS_Store
+*.swp
