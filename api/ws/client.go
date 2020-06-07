@@ -61,10 +61,12 @@ func (c *Client) readMessages() {
 	for {
 		var event ClientEvent
 		if err := c.conn.ReadJSON(&event); err != nil {
-			errorf(err.Error())
 			if websocket.IsUnexpectedCloseError(err, websocket.CloseGoingAway, websocket.CloseAbnormalClosure) {
+				errorf(err.Error())
 				break
 			}
+			wsError(c.conn, err)
+			break
 		}
 
 		logf("client event received from %v: %v -> %v", c.Addr, event.Type, event.ImageLink)
