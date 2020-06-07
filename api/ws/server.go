@@ -40,10 +40,9 @@ type FileSystem interface {
 }
 
 var arg0 = filepath.Base(os.Args[0])
-var logger = log.New(os.Stderr, "", 0)
 
 func logf(format string, args ...interface{}) {
-	logger.Printf(arg0+" * "+format, args...)
+	log.Printf(arg0+" * "+format, args...)
 }
 
 func errorf(format string, args ...interface{}) {
