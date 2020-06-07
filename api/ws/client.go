@@ -7,7 +7,6 @@ package ws
 
 import (
 	"fmt"
-	"log"
 	"time"
 
 	"github.com/gorilla/websocket"
@@ -62,12 +61,13 @@ func (c *Client) readMessages() {
 	for {
 		var event ClientEvent
 		if err := c.conn.ReadJSON(&event); err != nil {
+			errorf(err.Error())
 			if websocket.IsUnexpectedCloseError(err, websocket.CloseGoingAway, websocket.CloseAbnormalClosure) {
-				log.Printf("error: %v", err)
+				break
 			}
-			break
 		}
 
+		logf("client event received from %v: %v -> ", c.Addr, event.Type, event.ImageLink)
 		var msg *osc.Message
 		switch event.Type {
 		case "on-screen":
