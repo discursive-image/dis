@@ -43,7 +43,7 @@ func openInput(path string) (io.ReadCloser, error) {
 
 func main() {
 	i := flag.String("i", "-", "Input file path. Use - for stdin.")
-	sd := flag.String("sd", "dimages-all", "Storage directory path - where images will be stored.")
+	sd := flag.String("sd", "images", "Storage directory path - where images will be stored.")
 	p := flag.Int("p", 7745, "Server listening port.")
 	oscp := flag.Int("oscp", 5498, "OSC server listening port.")
 	osch := flag.String("osch", "localhost", "OSC server host.")
