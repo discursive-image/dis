@@ -1,7 +1,4 @@
 // Copyright 2013 The Gorilla WebSocket Authors. All rights reserved.
-// SPDX-FileCopyrightText: 2020 Jecoz
-//
-// SPDX-License-Identifier: MIT
 
 package ws
 

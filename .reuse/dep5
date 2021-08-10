@@ -1,8 +1,0 @@
-Format: https://www.debian.org/doc/packaging-manuals/copyright-format/1.0/
-Upstream-Name: dis
-Upstream-Contact: Daniel Morandini <danielmorandini@me.com>
-Source: https://github.com/discursive-image/dis
-
-Files: examples/* go.mod go.sum README.md
-Copyright: 2020 Jecoz <danielmorandini@me.com>
-License: MIT
