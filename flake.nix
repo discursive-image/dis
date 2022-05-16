@@ -17,6 +17,9 @@
           vendorSha256 = "sha256-+bH4meSDxc8Fznf/ZuPQ7FNqtqTMLmAupmfPEOlCY1w=";
 	};
 
-        devShell = pkgs.mkShell { buildInputs = [ pkgs.hello pkgs.cowsay ]; };
+        devShell = pkgs.mkShell { buildInputs = with pkgs; [
+  	  go
+	  gopls
+        ];};
       });
 }
